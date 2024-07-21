@@ -1,0 +1,8 @@
+## Interface: 110000
+## Title: CraftyProf
+## Version: 0.1
+## Notes: Stores profession and inventory data for external consumption
+## Author: Williwams
+## SavedVariables: CraftyProfDB
+
+CraftyProf.lua
