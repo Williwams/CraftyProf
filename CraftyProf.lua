@@ -91,7 +91,6 @@ function schematic(recipeSkillID)
         -- Crafting quality works this way:
         -- Items with 3 ranks will be between CraftingQualityID 1-3 and difficulty will be 0%, 50%, and 100% of baseDifficulty
         -- Items with 5 ranks will be between CraftingQualityID 4-8 and difficulty will be 0%, 20%, 50%, 80%, and 100% of baseDifficulty
-        local qual = coi["craftingQuality"]
         row["baseDifficulty"] = coi["baseDifficulty"]
         row["craftingQualityID"] = coi["craftingQualityID"]
     else
