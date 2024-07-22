@@ -1,12 +1,3 @@
-local addonName = ...
-
--- local GetSpellTexture = (C_Spell and C_Spell.GetSpellTexture) and C_Spell.GetSpellTexture or GetSpellTexture
--- local GetItemIconByID = (C_Item and C_Item.GetItemIconByID) and C_Item.GetItemIconByID or GetItemIconByID
--- local GetItemInfo = (C_Item and C_Item.GetItemInfo) and C_Item.GetItemInfo or GetItemInfo
--- local GetItemGem = (C_Item and C_Item.GetItemGem) and C_Item.GetItemGem or GetItemGem
--- local GetItemSpell = (C_Item and C_Item.GetItemSpell) and C_Item.GetItemSpell or GetItemSpell
--- local GetRecipeReagentItemLink = (C_TradeSkillUI and C_TradeSkillUI.GetRecipeReagentItemLink) and C_TradeSkillUI.GetRecipeReagentItemLink or GetTradeSkillReagentItemLink
-
 function tprint (tbl, indent)
     if not indent then indent = 0 end
     local toprint = string.rep(" ", indent) .. "{\r\n"
@@ -46,15 +37,11 @@ function tablelength(T)
     return count
   end
 
-function updateTextFromTable(table)
-    e:SetText(tprint(table))
+function remove_spaces(str)
+    str=string.gsub(str, "%s+", "")
+    return str
 end
-function updateTextFromStr(str)
-    e:SetText(str)
-end
--- MySimpleHTMLObject = CreateFrame('SimpleHTML',nil,UIParent);
--- MySimpleHTMLObject:SetText('<html><body><h1>Heading1</h1><p>A paragraph</p></body></html>');
--- MySimpleHTMLObject:Show()
+
 function sequence(from,to)
     local i = from - 1
     return function()
@@ -64,36 +51,27 @@ function sequence(from,to)
       end
     end
   end
+
+function contains(tbl, key)
+    return tbl[key] ~= nil
+end
+
 recipeSkillIDs = {}
-for i in sequence(441300,448340) do table.insert(recipeSkillIDs,i) end
+for i in sequence(400000,500000) do table.insert(recipeSkillIDs,i) end
 
 
-s = CreateFrame("ScrollFrame", nil, UIParent, "UIPanelScrollFrameTemplate") -- or your actual parent instead
-s:SetSize(300,200)
-s:SetPoint("RIGHT")
-e = CreateFrame("EditBox", nil, s)
-e:SetAutoFocus(false)
-e:SetMultiLine(true)
-e:SetFontObject(ChatFontNormal)
-e:SetWidth(300)
-s:SetScrollChild(e)
---local knownSpells = C_TradeSkillUI.GetBaseProfessionInfo()
---updateTextFromTable(knownSpells)
-s:RegisterEvent("TRADE_SKILL_SHOW");
+s = CreateFrame("ScrollFrame", nil, UIParent, "UIPanelScrollFrameTemplate")
+s:RegisterEvent("ADDON_LOADED"); -- Fired when saved variables are loaded
 local function eventHandler(self, event, ...)
-    -- local profInfo = C_TradeSkillUI.GetBaseProfessionInfo()
-    outTable={}
-    outTable["RecipeSpellIDs"] = {}
+    outTable=CraftyProfDB or {}
+    outTable["RecipeSpellIDs"] = outTable["RecipeSpellIDs"] or {}
     for i, t in pairs(recipeSkillIDs) do
         local recipe = schematic(t)
         if recipe then
             outTable["RecipeSpellIDs"][t]=recipe
-            --table.insert(outTable,recipe)
         end
     end
-    updateTextFromTable(outTable)
-    print(tablelength(outTable["RecipeSpellIDs"]))
-    -- updateTextFromStr(schematic(445330))
+    CraftyProfDB=outTable
 end
 s:SetScript("OnEvent", eventHandler);
 outTable={}
@@ -107,22 +85,15 @@ function schematic(recipeSkillID)
     local row = {}
     row.name = schematic["name"]
     row.reagents = reagents(reagentSlotSchematics)
-    sample_mats = {}
-    for i, r in pairs(row.reagents) do
-        mat = {}
-        mat["itemID"]=r.mat_options[1]
-        mat["dataSlotIndex"]=r.dataSlotIndex
-        mat["quantity"]=r.quantityRequired
-        table.insert(sample_mats, mat)
-    end
     local coi = C_TradeSkillUI.GetCraftingOperationInfo(recipeSkillID, {}, nil, false)
     -- Certain RecipeSpellIDs, such as 47767 Kah, King of the Deeps will claim to have CraftingOperationInfo but actually dont
     if coi ~= nil then
         -- Crafting quality works this way:
-        -- Items with 3 ranks will be between CraftingQualityID 1-3
-        -- Items with 5 ranks will be between CraftingQualityID 4-8
-        row["craftingQualityID"]=coi["craftingQualityID"]
-        row["quality"]=coi["quality"]
+        -- Items with 3 ranks will be between CraftingQualityID 1-3 and difficulty will be 0%, 50%, and 100% of baseDifficulty
+        -- Items with 5 ranks will be between CraftingQualityID 4-8 and difficulty will be 0%, 20%, 50%, 80%, and 100% of baseDifficulty
+        local qual = coi["craftingQuality"]
+        row["baseDifficulty"] = coi["baseDifficulty"]
+        row["craftingQualityID"] = coi["craftingQualityID"]
     else
         return
     end
@@ -136,18 +107,61 @@ function reagents(reagentSlotSchematics)
             local r={}
             r.quantityRequired = t["quantityRequired"]
             r.dataSlotIndex = t["dataSlotIndex"]
-            -- if #t.reagents > 1 then
             local mcr={}
             for j, alt in pairs(t.reagents) do
                 mcr[j]=alt.itemID
             end
             if #mcr > 0 then
-                --table.insert(r,mcr)
-                r["mat_options"]=mcr
+                r.mat_options=mcr
             end
-         --table.insert(re, t)    
         table.insert(re, r)
         end
     end
     return re
 end
+--[[
+SKILL_LINE_SPECS_RANKS_CHANGED
+ProfessionSpecUI 
+/script print(C_ProfSpecs.GetTabInfo(2883))
+/script print(C_ProfSpecs.GetChildrenForPath(1))
+/script print(C_ProfSpecs.GetDefaultSpecSkillLine()) --Most up to date expansion for spec
+/script print(C_ProfSpecs.GetCurrencyInfoForSkillLine(2883)) -- Name and number of knowledge points avail
+
+/script for k,v in pairs(C_ProfSpecs.GetChildrenForPath(1)) do print(k..": "..tostring(v)) end
+/script for k,v in pairs(C_ProfSpecs.GetChildrenForPath(1)) do print(k) end
+
+
+--]]
+        -- Keeping this after realizing that Difficulty is simple to calculate and only differs based on max Quality rank
+        -- This may be a useful jumping off point for automatically identifying reagent weights later
+        --[[
+        max_mats = {}
+        for i, r in ipairs(row.reagents) do
+            mat = {}
+            -- print("index number: "..#(r.mat_options) .. " for "..recipeSkillID)
+            mat["itemID"]=r.mat_options[#(r.mat_options)]
+            mat["dataSlotIndex"]=r.dataSlotIndex
+            mat["quantity"]=r.quantityRequired
+            table.insert(max_mats, mat)
+        end
+        local max = C_TradeSkillUI.GetCraftingOperationInfo(recipeSkillID, max_mats, nil, false)
+        if max ~= nil then
+            -- Crafting quality works this way:
+            -- Items with 3 ranks will be between CraftingQualityID 1-3
+            -- Items with 5 ranks will be between CraftingQualityID 4-8
+            qualityID=max["craftingQualityID"]
+            if qualityID > 0 then
+                local qual = max["craftingQuality"]
+                if contains(row,"craftingBaseDifficulty") then
+                    row["craftingBaseDifficulty"] = {}
+                end
+                row["craftingBaseDifficulty"][qual+1]=max["upperSkillTreshold"] --spelling error is in API
+                row["craftingBaseDifficulty"][qual]=max["lowerSkillThreshold"]
+                if qualityID <= 3 then
+                    row["craftingBaseDifficulty"][3]=max["baseDifficulty"]
+                else
+                    row["craftingBaseDifficulty"][5]=max["baseDifficulty"]
+                end
+            end
+        end
+        --]]
