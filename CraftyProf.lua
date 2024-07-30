@@ -62,7 +62,9 @@ for i in sequence(400000,500000) do table.insert(recipeSkillIDs,i) end
 
 s = CreateFrame("ScrollFrame", nil, UIParent, "UIPanelScrollFrameTemplate")
 s:RegisterEvent("ADDON_LOADED"); -- Fired when saved variables are loaded
+s:RegisterEvent("TRAIT_NODE_CHANGED");
 local function eventHandler(self, event, ...)
+    print(...)
     outTable=CraftyProfDB or {}
     outTable["RecipeSpellIDs"] = outTable["RecipeSpellIDs"] or {}
     for i, t in pairs(recipeSkillIDs) do
@@ -90,10 +92,15 @@ function update_row(row, id)
     if outTable["RecipeSpellIDs"][id] ~= nil then
         outTable["RecipeSpellIDs"][id]["baseDifficulty"] = row["baseDifficulty"]
         outTable["RecipeSpellIDs"][id]["craftingQualityID"] = row["craftingQualityID"]
-        if outTable["RecipeSpellIDs"][id]["concCosts"] == nil then
+        if outTable["RecipeSpellIDs"][id]["professionID"] == nil then
+            outTable["RecipeSpellIDs"][id]["professionID"] = row["professionID"]
+        end
+        if outTable["RecipeSpellIDs"][id]["concCosts"] == nil and outTable["RecipeSpellIDs"][id]["craftingQualityID"] > 0 then
             outTable["RecipeSpellIDs"][id]["concCosts"] = {}
         end
-        outTable["RecipeSpellIDs"][id]["concCosts"][row["lowerSkill"]] = row["concentrationCost"]
+        if outTable["RecipeSpellIDs"][id]["craftingQualityID"] > 3 then
+            outTable["RecipeSpellIDs"][id]["concCosts"][row["lowerSkill"]] = row["concentrationCost"]
+        end
         if row["itemID"] ~= nil then
             if outTable["RecipeSpellIDs"][id]["itemSkill"] == nil then
                 outTable["RecipeSpellIDs"][id]["itemSkill"] = {}
@@ -102,14 +109,19 @@ function update_row(row, id)
         end
     else
         outTable["RecipeSpellIDs"][id] = {}
+        if outTable["RecipeSpellIDs"][id]["professionID"] == nil then
+            outTable["RecipeSpellIDs"][id]["professionID"] = row["professionID"]
+        end
         outTable["RecipeSpellIDs"][id]["baseDifficulty"] = row["baseDifficulty"]
         outTable["RecipeSpellIDs"][id]["craftingQualityID"] = row["craftingQualityID"]
         outTable["RecipeSpellIDs"][id]["reagents"] = row["reagents"]
         outTable["RecipeSpellIDs"][id]["name"] = row["name"]
-        if outTable["RecipeSpellIDs"][id]["concCosts"] == nil then
+        if outTable["RecipeSpellIDs"][id]["concCosts"] == nil and outTable["RecipeSpellIDs"][id]["craftingQualityID"] > 0 then
             outTable["RecipeSpellIDs"][id]["concCosts"] = {}
         end
-        outTable["RecipeSpellIDs"][id]["concCosts"][row["lowerSkill"]] = row["concentrationCost"]
+        if outTable["RecipeSpellIDs"][id]["craftingQualityID"] > 0 then
+            outTable["RecipeSpellIDs"][id]["concCosts"][row["lowerSkill"]] = row["concentrationCost"]
+        end
     end
 end
 
@@ -125,13 +137,16 @@ function schematic(recipeSkillID)
     local coi = C_TradeSkillUI.GetCraftingOperationInfo(recipeSkillID, {}, nil, false)
     -- Certain RecipeSpellIDs, such as 47767 Kah, King of the Deeps will claim to have CraftingOperationInfo but actually dont
     if coi ~= nil then
+        row["professionID"] = C_TradeSkillUI.GetProfessionInfoByRecipeID(coi["recipeID"])
         -- Crafting quality works this way:
         -- Items with 3 ranks will be between CraftingQualityID 1-3 and difficulty will be 0%, 50%, and 100% of baseDifficulty
         -- Items with 5 ranks will be between CraftingQualityID 4-8 and difficulty will be 0%, 20%, 50%, 80%, and 100% of baseDifficulty
         row["baseDifficulty"] = coi["baseDifficulty"]
         row["craftingQualityID"] = coi["craftingQualityID"]
         row["lowerSkill"] = coi["baseSkill"] + coi["bonusSkill"]
-        row["concentrationCost"] = coi["concentrationCost"]
+        if coi["craftingQualityID"] > 0 then
+            row["concentrationCost"] = coi["concentrationCost"]
+        end
     else
         return
     end
@@ -150,8 +165,9 @@ function max_schematic(recipeSkillID)
         row["baseDifficulty"] = max["baseDifficulty"]
         row["craftingQualityID"] = max["craftingQualityID"]
         row["lowerSkill"] = max["baseSkill"] + max["bonusSkill"]
-        row["concentrationCost"] = max["concentrationCost"]
-        -- row["debug"] = tprint(max)
+        if max["craftingQualityID"] > 0 then
+            row["concentrationCost"] = max["concentrationCost"]
+        end
     else
         return
     end
@@ -173,7 +189,9 @@ function test_all_max_schematic(recipeSkillID, r)
         row["baseDifficulty"] = max_single["baseDifficulty"]
         row["craftingQualityID"] = max_single["craftingQualityID"]
         row["lowerSkill"] = max_single["baseSkill"] + max_single["bonusSkill"]
-        row["concentrationCost"] = max_single["concentrationCost"]
+        if max_single["craftingQualityID"] > 0 then
+            row["concentrationCost"] = max_single["concentrationCost"]
+        end
         row["itemID"] = r.mat_options[#(r.mat_options)]
     else
         return
