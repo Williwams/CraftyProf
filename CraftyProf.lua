@@ -68,13 +68,50 @@ local function eventHandler(self, event, ...)
     for i, t in pairs(recipeSkillIDs) do
         local recipe = schematic(t)
         if recipe then
-            outTable["RecipeSpellIDs"][t]=recipe
+            update_row(recipe, t)
+            local max_recipe = max_schematic(t)
+            if max_recipe then
+                update_row(max_recipe, t)
+            end
+            for _, r in pairs(outTable["RecipeSpellIDs"][t].reagents) do
+                local max_single_recipe = test_all_max_schematic(t, r)
+                if max_single_recipe then
+                    update_row(max_single_recipe, t)
+                end
+            end
         end
     end
     CraftyProfDB=outTable
 end
 s:SetScript("OnEvent", eventHandler);
 outTable={}
+
+function update_row(row, id)
+    if outTable["RecipeSpellIDs"][id] ~= nil then
+        outTable["RecipeSpellIDs"][id]["baseDifficulty"] = row["baseDifficulty"]
+        outTable["RecipeSpellIDs"][id]["craftingQualityID"] = row["craftingQualityID"]
+        if outTable["RecipeSpellIDs"][id]["concCosts"] == nil then
+            outTable["RecipeSpellIDs"][id]["concCosts"] = {}
+        end
+        outTable["RecipeSpellIDs"][id]["concCosts"][row["lowerSkill"]] = row["concentrationCost"]
+        if row["itemID"] ~= nil then
+            if outTable["RecipeSpellIDs"][id]["itemSkill"] == nil then
+                outTable["RecipeSpellIDs"][id]["itemSkill"] = {}
+            end
+            outTable["RecipeSpellIDs"][id]["itemSkill"][row["itemID"]] = row["lowerSkill"]
+        end
+    else
+        outTable["RecipeSpellIDs"][id] = {}
+        outTable["RecipeSpellIDs"][id]["baseDifficulty"] = row["baseDifficulty"]
+        outTable["RecipeSpellIDs"][id]["craftingQualityID"] = row["craftingQualityID"]
+        outTable["RecipeSpellIDs"][id]["reagents"] = row["reagents"]
+        outTable["RecipeSpellIDs"][id]["name"] = row["name"]
+        if outTable["RecipeSpellIDs"][id]["concCosts"] == nil then
+            outTable["RecipeSpellIDs"][id]["concCosts"] = {}
+        end
+        outTable["RecipeSpellIDs"][id]["concCosts"][row["lowerSkill"]] = row["concentrationCost"]
+    end
+end
 
 function schematic(recipeSkillID)
     local schematic = C_TradeSkillUI.GetRecipeSchematic(recipeSkillID, false)
@@ -93,6 +130,51 @@ function schematic(recipeSkillID)
         -- Items with 5 ranks will be between CraftingQualityID 4-8 and difficulty will be 0%, 20%, 50%, 80%, and 100% of baseDifficulty
         row["baseDifficulty"] = coi["baseDifficulty"]
         row["craftingQualityID"] = coi["craftingQualityID"]
+        row["lowerSkill"] = coi["baseSkill"] + coi["bonusSkill"]
+        row["concentrationCost"] = coi["concentrationCost"]
+    else
+        return
+    end
+    return row
+end
+
+function max_schematic(recipeSkillID)
+    local row = outTable["RecipeSpellIDs"][recipeSkillID]
+    local max_mats = {}
+    for _, r in pairs(row.reagents) do
+        table.insert(max_mats, {itemID = r.mat_options[#(r.mat_options)], quantity=r.quantityRequired, dataSlotIndex=r.dataSlotIndex})
+    end
+    -- print(max_mats)
+    local max = C_TradeSkillUI.GetCraftingOperationInfo(recipeSkillID, max_mats, nil, false)
+    if max ~= nil then
+        row["baseDifficulty"] = max["baseDifficulty"]
+        row["craftingQualityID"] = max["craftingQualityID"]
+        row["lowerSkill"] = max["baseSkill"] + max["bonusSkill"]
+        row["concentrationCost"] = max["concentrationCost"]
+        -- row["debug"] = tprint(max)
+    else
+        return
+    end
+    return row
+end
+
+function test_all_max_schematic(recipeSkillID, r)
+    local row = outTable["RecipeSpellIDs"][recipeSkillID]
+    local max = {}
+    for _, reagentlist in pairs(outTable["RecipeSpellIDs"][recipeSkillID].reagents) do
+        if r.dataSlotIndex == reagentlist.dataSlotIndex then
+            table.insert(max, {itemID = r.mat_options[#(r.mat_options)], quantity=r.quantityRequired, dataSlotIndex=r.dataSlotIndex})
+        else
+            table.insert(max, {itemID = r.mat_options[1], quantity=r.quantityRequired, dataSlotIndex=r.dataSlotIndex})
+        end
+    end
+    local max_single = C_TradeSkillUI.GetCraftingOperationInfo(recipeSkillID, max, nil, false)
+    if max_single ~= nil then
+        row["baseDifficulty"] = max_single["baseDifficulty"]
+        row["craftingQualityID"] = max_single["craftingQualityID"]
+        row["lowerSkill"] = max_single["baseSkill"] + max_single["bonusSkill"]
+        row["concentrationCost"] = max_single["concentrationCost"]
+        row["itemID"] = r.mat_options[#(r.mat_options)]
     else
         return
     end
@@ -100,7 +182,7 @@ function schematic(recipeSkillID)
 end
 
 function reagents(reagentSlotSchematics)
-    re={}
+    local re={}
     for i, t in pairs(reagentSlotSchematics) do
         if t.required==true then
             local r={}
@@ -125,7 +207,7 @@ ProfessionSpecUI
 /script print(C_ProfSpecs.GetChildrenForPath(1))
 /script print(C_ProfSpecs.GetDefaultSpecSkillLine()) --Most up to date expansion for spec
 /script print(C_ProfSpecs.GetCurrencyInfoForSkillLine(2883)) -- Name and number of knowledge points avail
-
+ print(tprint(C_Traits.GetTreeHash(1))) -- returns a hash of 16 values for...
 /script for k,v in pairs(C_ProfSpecs.GetChildrenForPath(1)) do print(k..": "..tostring(v)) end
 /script for k,v in pairs(C_ProfSpecs.GetChildrenForPath(1)) do print(k) end
 
