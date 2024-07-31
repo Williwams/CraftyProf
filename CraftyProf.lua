@@ -63,11 +63,20 @@ for i in sequence(400000,500000) do table.insert(recipeSkillIDs,i) end
 s = CreateFrame("ScrollFrame", nil, UIParent, "UIPanelScrollFrameTemplate")
 s:RegisterEvent("ADDON_LOADED"); -- Fired when saved variables are loaded
 s:RegisterEvent("TRAIT_NODE_CHANGED");
+s:RegisterEvent("CRAFTINGORDERS_UPDATE_ORDER_COUNT");
 local function eventHandler(self, event, ...)
-    print(...)
     outTable=CraftyProfDB or {}
     outTable["RecipeSpellIDs"] = outTable["RecipeSpellIDs"] or {}
     outTable["items"] = outTable["items"] or {}
+    outTable["CraftingOrders"] = outTable["CraftingOrders"] or {}
+    if event == "CRAFTINGORDERS_UPDATE_ORDER_COUNT" then
+        orderTab, orderNum = ...
+        orders = C_CraftingOrders.GetCrafterOrders(orderTab)
+        for i, coi in pairs(orders) do
+            info = getCraftingOrderInfo(coi)
+            outTable["CraftingOrders"][coi.orderID] = info
+        end
+    end
     for i, t in pairs(recipeSkillIDs) do
         local recipe = schematic(t)
         if recipe then
@@ -146,10 +155,10 @@ function schematic(recipeSkillID)
         row["baseDifficulty"] = coi["baseDifficulty"]
         row["craftingQualityID"] = coi["craftingQualityID"]
         row["lowerSkill"] = coi["baseSkill"] + coi["bonusSkill"]
-        --if row["craftingDataItemIDs"] == nil then
+        if row["craftingDataItemIDs"] == nil then
             row["craftingDataItemIDs"] = {}
-        --end
-        row["craftingDataItemIDs"][coi["craftingQualityID"]] = getItemIDByCraftingDataID(coi["craftingDataID"])
+        end
+        row["craftingDataItemIDs"][coi["craftingQualityID"]] = getItemIDCraftingData(coi["craftingDataID"], coi["craftingQualityID"])
         if coi["craftingQualityID"] > 0 then
             row["concentrationCost"] = coi["concentrationCost"]
         end
@@ -174,7 +183,7 @@ function max_schematic(recipeSkillID)
         if row["craftingDataItemIDs"] == nil then
             row["craftingDataItemIDs"] = {}
         end
-        row["craftingDataItemIDs"][max["craftingQualityID"]] = getItemIDByCraftingDataID(max["craftingDataID"])
+        row["craftingDataItemIDs"][max["craftingQualityID"]] = getItemIDCraftingData(max["craftingDataID"], max["craftingQualityID"])
         if max["craftingQualityID"] > 0 then
             row["concentrationCost"] = max["concentrationCost"]
         end
@@ -202,7 +211,7 @@ function test_all_max_schematic(recipeSkillID, r)
         if row["craftingDataItemIDs"] == nil then
             row["craftingDataItemIDs"] = {}
         end
-        row["craftingDataItemIDs"][max_single["craftingQualityID"]] = getItemIDByCraftingDataID(max_single["craftingDataID"])
+        row["craftingDataItemIDs"][max_single["craftingQualityID"]] = getItemIDCraftingData(max_single["craftingDataID"], max_single["craftingQualityID"])
         if max_single["craftingQualityID"] > 0 then
             row["concentrationCost"] = max_single["concentrationCost"]
         end
@@ -233,14 +242,53 @@ function reagents(reagentSlotSchematics)
     return re
 end
 
+function getItemIDCraftingData(craftingDataID, craftingQualityID)
+    -- This item returns materials (Ingots, Dust, etc), which have different ItemIDs based on quality. 
+    -- All quality based materials currently cap at Rank 3 so we dont need to math out craftingQualityID
+    if craftingDataItemQuality[craftingDataID] ~= nil and craftingQualityID >= 1 and craftingQualityID <= 3 then
+        return getItemIDByCraftingDataItemQualityID(craftingDataID, craftingQualityID)
+    else
+        --The rest of the items should return a singular ItemID regardless of skill (gear)
+        return getItemIDByCraftingDataID(craftingDataID)
+    end
+end
+
 function getItemIDByCraftingDataID(craftingDataID)
     return tonumber(craftingData[craftingDataID]) or craftingDataID
 end
 
--- This data comes from the table CraftingDataItemQuality which can be searched per craftingDataID
--- It should be ordered such that CraftingQualityID can be used as an index of the rows matching craftingDataID
 function getItemIDByCraftingDataItemQualityID(craftingDataID, craftingQualityID)
-    return tonumber(craftingDataItemQuality[craftingDataID][craftingDataID]) or 0
+    return tonumber(craftingDataItemQuality[craftingDataID][craftingQualityID]) or 0
+end
+
+function getCraftingOrderInfo(coi)
+    row = {}
+    row["itemID"] = coi["itemID"]
+    row["spellID"] = coi["spellID"]
+    row["minQuality"] = coi["minQuality"]
+    row["reagentState"] = coi["reagentState"]
+    row["netTip"] = coi["tipAmount"] - coi["consortiumCut"]
+    row["npcOrderRewards"] = row["npcOrderRewards"] or {}
+    for _, r in pairs(coi["npcOrderRewards"]) do
+        if r['itemLink'] ~= nil then
+            local l = r['itemLink']
+            -- lua regex doesnt support limiting quantifiers so we have to just tell it we want 6 numbers in a row
+            for i in string.gmatch(l, "[0-9][0-9][0-9][0-9][0-9][0-9]") do
+                row["npcOrderRewards"]["itemID"] = i
+            end
+        end
+        if r['currencyType'] ~= nil then
+            row["npcOrderRewards"]["currencyType"] = r['currencyType']
+        end
+        row["npcOrderRewards"]["count"] = r['count']
+    end
+    row["suppliedReagents"] = row["suppliedReagents"] or {}
+    for _, r in pairs(coi["reagents"]) do
+        if r["source"] == 1 then
+            row["suppliedReagents"][r['reagent']['itemID']] = r['source']
+        end
+    end
+    return row
 end
 
 craftingData = 
@@ -477,7 +525,7 @@ craftingData =
     [2453] = "225936"
 }
 
-CraftingDataItemQuality = 
+craftingDataItemQuality = 
 {
     ["1"] = {"190645","190643","190642"},
     ["2"] = {"189541","189542","189543"},
@@ -910,3 +958,4 @@ CraftingDataItemQuality =
     ["2456"] = {"228401","228402","228403"},
     ["2457"] = {"228404","228405","228406"}
 }
+
