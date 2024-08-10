@@ -20,27 +20,8 @@ function tprint (tbl, indent)
       end
     end
     toprint = toprint .. string.rep(" ", indent-2) .. "}"
-    return toprint
+    print(toprint)
   end
-
-function tarray (tbl)
-    arr=""
-    for k,v in ipairs(tbl) do 
-        arr=arr+v
-    end
-    return arr
-end
-
-function tablelength(T)
-    local count = 0
-    for _ in pairs(T) do count = count + 1 end
-    return count
-  end
-
-function remove_spaces(str)
-    str=string.gsub(str, "%s+", "")
-    return str
-end
 
 function sequence(from,to)
     local i = from - 1
@@ -52,9 +33,6 @@ function sequence(from,to)
     end
   end
 
-function contains(tbl, key)
-    return tbl[key] ~= nil
-end
 
 recipeSkillIDs = {}
 for i in sequence(400000,500000) do table.insert(recipeSkillIDs,i) end
@@ -62,10 +40,10 @@ for i in sequence(400000,500000) do table.insert(recipeSkillIDs,i) end
 
 s = CreateFrame("ScrollFrame", nil, UIParent, "UIPanelScrollFrameTemplate")
 s:RegisterEvent("ADDON_LOADED"); -- Fired when saved variables are loaded
-s:RegisterEvent("TRAIT_NODE_CHANGED");
+s:RegisterEvent("TRAIT_NODE_CHANGED"); -- This may not be necessary, unsure if TRADE_SKILL_LIST_UPDATE fires correctly on close
 s:RegisterEvent("CRAFTINGORDERS_UPDATE_ORDER_COUNT");
-s:RegisterEvent("AUCTION_HOUSE_SHOW");
-s:RegisterEvent("REPLICATE_ITEM_LIST_UPDATE");
+--s:RegisterEvent("AUCTION_HOUSE_SHOW"); 
+--s:RegisterEvent("REPLICATE_ITEM_LIST_UPDATE");
 s:RegisterEvent("TRADE_SKILL_SHOW");
 s:RegisterEvent("TRADE_SKILL_LIST_UPDATE");
 local function eventHandler(self, event, ...)
@@ -98,7 +76,7 @@ local function eventHandler(self, event, ...)
         for i, t in pairs(recipeSkillIDs) do
             local recipe = schematic(t)
             if recipe then
-                update_row(recipe, t)
+                outTable["RecipeSpellIDs"][t] = recipe
             end
         end
     end
@@ -157,43 +135,6 @@ function map_profession_traits()
         end
     end
     return nodeMap
-end
-
-function update_row(row, id)
-    if outTable["RecipeSpellIDs"][id] ~= nil then
-        outTable["RecipeSpellIDs"][id]["baseDifficulty"] = row["baseDifficulty"]
-        outTable["RecipeSpellIDs"][id]["craftingQualityID"] = row["craftingQualityID"]
-        if outTable["RecipeSpellIDs"][id]["professionID"] == nil then
-            outTable["RecipeSpellIDs"][id]["professionID"] = row["professionID"]
-        end
-        if outTable["RecipeSpellIDs"][id]["concCosts"] == nil and outTable["RecipeSpellIDs"][id]["craftingQualityID"] > 0 then
-            outTable["RecipeSpellIDs"][id]["concCosts"] = {}
-        end
-        if outTable["RecipeSpellIDs"][id]["craftingQualityID"] > 3 then
-            outTable["RecipeSpellIDs"][id]["concCosts"][row["lowerSkill"]] = row["concentrationCost"]
-        end
-        if row["itemID"] ~= nil then
-            if outTable["RecipeSpellIDs"][id]["itemSkill"] == nil then
-                outTable["RecipeSpellIDs"][id]["itemSkill"] = {}
-            end
-            outTable["RecipeSpellIDs"][id]["itemSkill"][row["itemID"]] = row["lowerSkill"]
-        end
-    else
-        outTable["RecipeSpellIDs"][id] = {}
-        if outTable["RecipeSpellIDs"][id]["professionID"] == nil then
-            outTable["RecipeSpellIDs"][id]["professionID"] = row["professionID"]
-        end
-        outTable["RecipeSpellIDs"][id]["baseDifficulty"] = row["baseDifficulty"]
-        outTable["RecipeSpellIDs"][id]["craftingQualityID"] = row["craftingQualityID"]
-        outTable["RecipeSpellIDs"][id]["reagents"] = row["reagents"]
-        outTable["RecipeSpellIDs"][id]["name"] = row["name"]
-        if outTable["RecipeSpellIDs"][id]["concCosts"] == nil and outTable["RecipeSpellIDs"][id]["craftingQualityID"] > 0 then
-            outTable["RecipeSpellIDs"][id]["concCosts"] = {}
-        end
-        if outTable["RecipeSpellIDs"][id]["craftingQualityID"] > 0 then
-            outTable["RecipeSpellIDs"][id]["concCosts"][row["lowerSkill"]] = row["concentrationCost"]
-        end
-    end
 end
 
 function schematic(recipeSkillID)
