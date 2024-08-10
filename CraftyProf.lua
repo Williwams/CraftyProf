@@ -64,41 +64,96 @@ s = CreateFrame("ScrollFrame", nil, UIParent, "UIPanelScrollFrameTemplate")
 s:RegisterEvent("ADDON_LOADED"); -- Fired when saved variables are loaded
 s:RegisterEvent("TRAIT_NODE_CHANGED");
 s:RegisterEvent("CRAFTINGORDERS_UPDATE_ORDER_COUNT");
+s:RegisterEvent("AUCTION_HOUSE_SHOW");
+s:RegisterEvent("REPLICATE_ITEM_LIST_UPDATE");
+s:RegisterEvent("TRADE_SKILL_SHOW");
+s:RegisterEvent("TRADE_SKILL_LIST_UPDATE");
 local function eventHandler(self, event, ...)
+    charTable=CraftyProfCharacterDB or {}
     outTable=CraftyProfDB or {}
     outTable["RecipeSpellIDs"] = outTable["RecipeSpellIDs"] or {}
     outTable["items"] = outTable["items"] or {}
-    outTable["CraftingOrders"] = outTable["CraftingOrders"] or {}
+    charTable["CraftingOrders"] = charTable["CraftingOrders"] or {}
+    --charTable["ProfTraits"] = charTable["ProfTraits"] or {}
+    charTable["RecipeList"] = charTable["RecipeList"] or {}
+    outTable["auctions"] = outTable["auctions"] or {}
     if event == "CRAFTINGORDERS_UPDATE_ORDER_COUNT" then
         orderTab, orderNum = ...
         orders = C_CraftingOrders.GetCrafterOrders(orderTab)
         for i, coi in pairs(orders) do
             info = getCraftingOrderInfo(coi)
-            outTable["CraftingOrders"][coi.orderID] = info
+            charTable["CraftingOrders"][coi.orderID] = info
         end
     end
-    for i, t in pairs(recipeSkillIDs) do
-        local recipe = schematic(t)
-        if recipe then
-            update_row(recipe, t)
-            local max_recipe = max_schematic(t)
-            if max_recipe then
-                update_row(max_recipe, t)
-            end
-            for _, r in pairs(outTable["RecipeSpellIDs"][t].reagents) do
-                local max_single_recipe = test_all_max_schematic(t, r)
-                if max_single_recipe then
-                    update_row(max_single_recipe, t)
-                end
+    --if event == "AUCTION_HOUSE_SHOW" then
+        --outTable["auctions"] = getAllAuctions()
+    --end
+    if event == "ADDON_LOADED" then
+        local nodeData=map_profession_traits()
+        charTable["ProfTraits"] = nodeData
+        for i, t in pairs(recipeSkillIDs) do
+            local recipe = schematic(t)
+            if recipe then
+                update_row(recipe, t)
             end
         end
     end
+    if event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" then
+        prof, data = update_recipe_list("Khaz Algar")
+        if prof > 0 then
+            charTable["RecipeList"][prof] = data
+        end
+    end
+    CraftyProfCharacterDB = charTable
     CraftyProfDB=outTable
 end
 s:SetScript("OnEvent", eventHandler);
 
--- C_Traits.GetStagedChanges(configID)
--- C_Traits.GetNodeInfo(configID, nodeID)
+function get_concentration_cap_timestamp(professionID)
+    local currencyID = C_TradeSkillUI.GetConcentrationCurrencyID(professionID)
+    local concentrationInfo = C_CurrencyInfo.GetCurrencyInfo(currencyID)
+    local curTime = C_DateAndTime.GetServerTimeLocal()
+    local remaining_ticks = (concentrationInfo.maxQuantity - concentrationInfo.quantity)/concentrationInfo.rechargingAmountPerCycle
+    return curTime + concentrationInfo.rechargingCycleDurationMS * remaining_ticks / 1000
+end
+
+function update_recipe_list(expansionName)
+    local profInfo = C_TradeSkillUI.GetChildProfessionInfo()
+    local row = {}
+    local professionID = profInfo.professionID
+    if profInfo.expansionName == expansionName then
+        row.skillLevel=profInfo.skillLevel -- Base skill for this top
+        row.skillModifier=profInfo.skillModifier --Additional points from gear and racials
+        row.maxSkill=profInfo.maxSkill -- Base skill for this top
+        row.ConcentrationFill = get_concentration_cap_timestamp(professionID)
+    end
+    row.Recipes={}
+    for _, id in pairs(C_TradeSkillUI.GetAllRecipeIDs()) do
+        local recipeInfo = C_TradeSkillUI.GetRecipeInfo(id)
+        if recipeInfo.learned then
+            table.insert(row.Recipes,recipeInfo.recipeID)
+        end
+    end
+    return professionID, row
+
+end
+
+function map_profession_traits()
+    local nodeMap = {}
+    for prof, nodelist in pairs(TraitNodes) do
+        local configID = C_ProfSpecs.GetConfigIDForSkillLine(prof)
+        if configID > 0 then
+            for _, node in pairs(TraitNodes[prof]) do
+                local nodeInfo = C_Traits.GetNodeInfo(configID, node)
+                if nodeInfo.activeEntry.rank > 0 then
+                    nodeMap[node]=nodeInfo.activeEntry.rank
+                end
+            end
+        end
+    end
+    return nodeMap
+end
+
 function update_row(row, id)
     if outTable["RecipeSpellIDs"][id] ~= nil then
         outTable["RecipeSpellIDs"][id]["baseDifficulty"] = row["baseDifficulty"]
@@ -168,60 +223,6 @@ function schematic(recipeSkillID)
     return row
 end
 
-function max_schematic(recipeSkillID)
-    local row = outTable["RecipeSpellIDs"][recipeSkillID]
-    local max_mats = {}
-    for _, r in pairs(row.reagents) do
-        table.insert(max_mats, {itemID = r.mat_options[#(r.mat_options)], quantity=r.quantityRequired, dataSlotIndex=r.dataSlotIndex})
-    end
-    -- print(max_mats)
-    local max = C_TradeSkillUI.GetCraftingOperationInfo(recipeSkillID, max_mats, nil, false)
-    if max ~= nil then
-        row["baseDifficulty"] = max["baseDifficulty"]
-        row["craftingQualityID"] = max["craftingQualityID"]
-        row["lowerSkill"] = max["baseSkill"] + max["bonusSkill"]
-        if row["craftingDataItemIDs"] == nil then
-            row["craftingDataItemIDs"] = {}
-        end
-        row["craftingDataItemIDs"][max["craftingQualityID"]] = getItemIDCraftingData(max["craftingDataID"], max["craftingQualityID"])
-        if max["craftingQualityID"] > 0 then
-            row["concentrationCost"] = max["concentrationCost"]
-        end
-    else
-        return
-    end
-    return row
-end
-
-function test_all_max_schematic(recipeSkillID, r)
-    local row = outTable["RecipeSpellIDs"][recipeSkillID]
-    local max = {}
-    for _, reagentlist in pairs(outTable["RecipeSpellIDs"][recipeSkillID].reagents) do
-        if r.dataSlotIndex == reagentlist.dataSlotIndex then
-            table.insert(max, {itemID = r.mat_options[#(r.mat_options)], quantity=r.quantityRequired, dataSlotIndex=r.dataSlotIndex})
-        else
-            table.insert(max, {itemID = r.mat_options[1], quantity=r.quantityRequired, dataSlotIndex=r.dataSlotIndex})
-        end
-    end
-    local max_single = C_TradeSkillUI.GetCraftingOperationInfo(recipeSkillID, max, nil, false)
-    if max_single ~= nil then
-        row["baseDifficulty"] = max_single["baseDifficulty"]
-        row["craftingQualityID"] = max_single["craftingQualityID"]
-        row["lowerSkill"] = max_single["baseSkill"] + max_single["bonusSkill"]
-        if row["craftingDataItemIDs"] == nil then
-            row["craftingDataItemIDs"] = {}
-        end
-        row["craftingDataItemIDs"][max_single["craftingQualityID"]] = getItemIDCraftingData(max_single["craftingDataID"], max_single["craftingQualityID"])
-        if max_single["craftingQualityID"] > 0 then
-            row["concentrationCost"] = max_single["concentrationCost"]
-        end
-        row["itemID"] = r.mat_options[#(r.mat_options)]
-    else
-        return
-    end
-    return row
-end
-
 function reagents(reagentSlotSchematics)
     local re={}
     for i, t in pairs(reagentSlotSchematics) do
@@ -240,6 +241,29 @@ function reagents(reagentSlotSchematics)
         end
     end
     return re
+end
+
+function getAllAuctions()
+    
+    ah_list=C_AuctionHouse.ReplicateItems()
+    ah_length=C_AuctionHouse.GetNumReplicateItems()
+    print("Starting to collect" .. ah_length .. "auctions, please wait")
+    local i=0
+    local db_out = {}
+    while i< ah_length do
+        local info = { C_AuctionHouse.GetReplicateItemInfo(i) }
+        local link = C_AuctionHouse.GetReplicateItemLink(i)
+        if not C_Item.DoesItemExistByID(info[17]) then
+            --Continue would go here if it could
+        else
+            db_out[i]={info, link}
+        end
+        if i % 10000 then
+            print("finished ".. i .. " out of " .. ah_length)
+        end
+        i = i + 1
+    end
+    return db_out
 end
 
 function getItemIDCraftingData(craftingDataID, craftingQualityID)
@@ -958,4 +982,3 @@ craftingDataItemQuality =
     ["2456"] = {"228401","228402","228403"},
     ["2457"] = {"228404","228405","228406"}
 }
-

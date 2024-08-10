@@ -4,5 +4,9 @@
 ## Notes: Stores profession and inventory data for external consumption
 ## Author: Williwams
 ## SavedVariables: CraftyProfDB
+## SavedVariablesPerCharacter: CraftyProfCharacterDB
 
 CraftyProf.lua
+
+#rebuilt from wow-profession-tree
+traitnodes.lua
