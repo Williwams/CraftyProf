@@ -74,7 +74,7 @@ local function eventHandler(self, event, ...)
     outTable["RecipeSpellIDs"] = outTable["RecipeSpellIDs"] or {}
     outTable["items"] = outTable["items"] or {}
     charTable["CraftingOrders"] = charTable["CraftingOrders"] or {}
-    --charTable["ProfTraits"] = charTable["ProfTraits"] or {}
+    charTable["ProfTraits"] = charTable["ProfTraits"] or {}
     charTable["RecipeList"] = charTable["RecipeList"] or {}
     outTable["auctions"] = outTable["auctions"] or {}
     if event == "CRAFTINGORDERS_UPDATE_ORDER_COUNT" then
@@ -89,8 +89,12 @@ local function eventHandler(self, event, ...)
         --outTable["auctions"] = getAllAuctions()
     --end
     if event == "ADDON_LOADED" then
+        -- Do Profession Traits on login, should also do after its been updated
         local nodeData=map_profession_traits()
         charTable["ProfTraits"] = nodeData
+        
+        -- This needs to be refactored and then split in to its own addon. 
+        -- This functionality is only used to scrape in game resources for crafting data
         for i, t in pairs(recipeSkillIDs) do
             local recipe = schematic(t)
             if recipe then
@@ -99,7 +103,7 @@ local function eventHandler(self, event, ...)
         end
     end
     if event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" then
-        prof, data = update_recipe_list("Khaz Algar")
+        prof, data = update_recipe_list("Khaz Algar") 
         if prof > 0 then
             charTable["RecipeList"][prof] = data
         end
@@ -124,9 +128,10 @@ function update_recipe_list(expansionName)
     if profInfo.expansionName == expansionName then
         row.skillLevel=profInfo.skillLevel -- Base skill for this top
         row.skillModifier=profInfo.skillModifier --Additional points from gear and racials
-        row.maxSkill=profInfo.maxSkill -- Base skill for this top
-        row.ConcentrationFill = get_concentration_cap_timestamp(professionID)
+        row.maxSkill=profInfo.maxSkill -- Max skill. Usually 100 but this might run against an older skill or Fishing
+        row.ConcentrationFill = get_concentration_cap_timestamp(professionID) -- Timestamp when Concentration will be refilled. More stable to store and use this way
     end
+    row.ProfessionStats=getProfessionItemStats()
     row.Recipes={}
     for _, id in pairs(C_TradeSkillUI.GetAllRecipeIDs()) do
         local recipeInfo = C_TradeSkillUI.GetRecipeInfo(id)
@@ -134,7 +139,7 @@ function update_recipe_list(expansionName)
             table.insert(row.Recipes,recipeInfo.recipeID)
         end
     end
-    return professionID, row
+    return tonumber(professionID), row
 
 end
 
@@ -201,7 +206,6 @@ function schematic(recipeSkillID)
     row.name = schematic["name"]
     row.reagents = reagents(reagentSlotSchematics)
     local coi = C_TradeSkillUI.GetCraftingOperationInfo(recipeSkillID, {}, nil, false)
-    -- Certain RecipeSpellIDs, such as 47767 Kah, King of the Deeps will claim to have CraftingOperationInfo but actually dont
     if coi ~= nil then
         row["professionID"] = C_TradeSkillUI.GetProfessionInfoByRecipeID(coi["recipeID"])
         -- Crafting quality works this way:
@@ -209,7 +213,6 @@ function schematic(recipeSkillID)
         -- Items with 5 ranks will be between CraftingQualityID 4-8 and difficulty will be 0%, 20%, 50%, 80%, and 100% of baseDifficulty
         row["baseDifficulty"] = coi["baseDifficulty"]
         row["craftingQualityID"] = coi["craftingQualityID"]
-        row["lowerSkill"] = coi["baseSkill"] + coi["bonusSkill"]
         if row["craftingDataItemIDs"] == nil then
             row["craftingDataItemIDs"] = {}
         end
@@ -241,6 +244,48 @@ function reagents(reagentSlotSchematics)
         end
     end
     return re
+end
+
+function getProfessionItemStats()
+    local profInfo = C_TradeSkillUI.GetChildProfessionInfo()
+    local gearSlots = C_TradeSkillUI.GetProfessionSlots(profInfo.profession)
+    local statSums = {["Multicraft"] = 0, ["Crafting Speed"] = 0, ["Resourcefulness"] = 0, ["Ingenuity"] = 0}
+    for _, slot in pairs(gearSlots) do
+        local itemLink = GetInventoryItemLink("player",slot)
+        if itemLink ~= nil then
+            local stats = C_Item.GetItemStats(itemLink)
+            for stat, amt in pairs(stats) do
+                statSums[statShorts[stat]] = statSums[statShorts[stat]] + tonumber(amt)
+            end
+            
+            local amount, enchant_stat = readEnchant(itemLink)
+            if amount > 0 and statSums[enchant_stat] ~= nil then
+                statSums[enchant_stat] = statSums[enchant_stat] + tonumber(amount)
+            end
+        end
+    end
+    return statSums
+end
+
+statShorts = {
+    ["ITEM_MOD_MULTICRAFT_SHORT"] = "Multicraft",
+    ["ITEM_MOD_CRAFTING_SPEED_SHORT"] = "Crafting Speed",
+    ["ITEM_MOD_RESOURCEFULNESS_SHORT"] = "Resourcefulness",
+    ["ITEM_MOD_INGENUITY_SHORT"] = "Ingenuity",
+
+}
+
+
+function readEnchant(itemLink)
+    local tooltipData = C_TooltipInfo.GetHyperlink(itemLink)
+    for _, line in pairs(tooltipData.lines) do
+        if string.find(line.leftText, 'Enchanted:') then
+            -- split capture groups to pass it back
+            local amount, stat = string.match(line.leftText, "Enchanted: [+](%d+) (%w+)")
+            return tonumber(amount), stat
+        end
+    end
+    return 0, 0
 end
 
 function getAllAuctions()
