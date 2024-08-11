@@ -70,7 +70,7 @@ local function eventHandler(self, event, ...)
         -- Do Profession Traits on login, should also do after its been updated
         local nodeData=map_profession_traits()
         charTable["ProfTraits"] = nodeData
-        
+        charTable["charGUID"] = UnitGUID("player")
         -- This needs to be refactored and then split in to its own addon. 
         -- This functionality is only used to scrape in game resources for crafting data
         for i, t in pairs(recipeSkillIDs) do
@@ -94,7 +94,7 @@ s:SetScript("OnEvent", eventHandler);
 function get_concentration_cap_timestamp(professionID)
     local currencyID = C_TradeSkillUI.GetConcentrationCurrencyID(professionID)
     local concentrationInfo = C_CurrencyInfo.GetCurrencyInfo(currencyID)
-    local curTime = C_DateAndTime.GetServerTimeLocal()
+    local curTime = time()
     local remaining_ticks = (concentrationInfo.maxQuantity - concentrationInfo.quantity)/concentrationInfo.rechargingAmountPerCycle
     return curTime + concentrationInfo.rechargingCycleDurationMS * remaining_ticks / 1000
 end
@@ -154,6 +154,7 @@ function schematic(recipeSkillID)
         -- Items with 5 ranks will be between CraftingQualityID 4-8 and difficulty will be 0%, 20%, 50%, 80%, and 100% of baseDifficulty
         row["baseDifficulty"] = coi["baseDifficulty"]
         row["craftingQualityID"] = coi["craftingQualityID"]
+        row["craftingDataID"] = coi["craftingDataID"]
     else
         return
     end
