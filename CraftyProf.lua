@@ -144,11 +144,15 @@ end
 
 function schematic(recipeSkillID)
     local schematic = C_TradeSkillUI.GetRecipeSchematic(recipeSkillID, false)
+    
     if schematic["hasCraftingOperationInfo"] == false then
         return
     end
     local row = {}
-    row.reagents = reagents(schematic["reagentSlotSchematics"])
+    local coi = C_TradeSkillUI.GetCraftingOperationInfo(recipeSkillID, {}, nil, false)
+    if coi ~= nil then
+        row["professionID"] = C_TradeSkillUI.GetProfessionInfoByRecipeID(coi["recipeID"])
+        row.reagents = reagents(schematic["reagentSlotSchematics"])
     return row
 end
 
