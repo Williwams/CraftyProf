@@ -153,6 +153,8 @@ function schematic(recipeSkillID)
     if coi ~= nil then
         row["professionID"] = C_TradeSkillUI.GetProfessionInfoByRecipeID(coi["recipeID"])
         row.reagents = reagents(schematic["reagentSlotSchematics"])
+    else
+        return
     return row
 end
 
