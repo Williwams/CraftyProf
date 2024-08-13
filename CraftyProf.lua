@@ -35,9 +35,12 @@ function sequence(from,to)
 
 
 recipeSkillIDs = {}
-for i in sequence(400000,500000) do table.insert(recipeSkillIDs,i) end
 
 
+SLASH_CRAFTYSCRAPE1 = "/craftyscrape"
+SlashCmdList["CRAFTYSCRAPE"] = function()
+    scrape_recipe_reagents()
+ end 
 s = CreateFrame("ScrollFrame", nil, UIParent, "UIPanelScrollFrameTemplate")
 s:RegisterEvent("ADDON_LOADED"); -- Fired when saved variables are loaded
 s:RegisterEvent("TRAIT_NODE_CHANGED"); -- This may not be necessary, unsure if TRADE_SKILL_LIST_UPDATE fires correctly on close
@@ -48,17 +51,13 @@ s:RegisterEvent("TRADE_SKILL_SHOW");
 s:RegisterEvent("TRADE_SKILL_LIST_UPDATE");
 local function eventHandler(self, event, ...)
     charTable=CraftyProfCharacterDB or {}
-    outTable=CraftyProfDB or {}
-    outTable["RecipeSpellIDs"] = outTable["RecipeSpellIDs"] or {}
-    outTable["items"] = outTable["items"] or {}
     charTable["CraftingOrders"] = charTable["CraftingOrders"] or {}
     charTable["ProfTraits"] = charTable["ProfTraits"] or {}
     charTable["RecipeList"] = charTable["RecipeList"] or {}
-    outTable["auctions"] = outTable["auctions"] or {}
     if event == "CRAFTINGORDERS_UPDATE_ORDER_COUNT" then
         orderTab, orderNum = ...
         orders = C_CraftingOrders.GetCrafterOrders(orderTab)
-        for i, coi in pairs(orders) do
+        for _, coi in pairs(orders) do
             info = getCraftingOrderInfo(coi)
             charTable["CraftingOrders"][coi.orderID] = info
         end
@@ -73,12 +72,6 @@ local function eventHandler(self, event, ...)
         charTable["charGUID"] = UnitGUID("player")
         -- This needs to be refactored and then split in to its own addon. 
         -- This functionality is only used to scrape in game resources for crafting data
-        for i, t in pairs(recipeSkillIDs) do
-            local recipe = schematic(t)
-            if recipe then
-                outTable["RecipeSpellIDs"][t] = recipe
-            end
-        end
     end
     if event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" then
         prof, data = update_recipe_list("Khaz Algar") 
@@ -87,9 +80,21 @@ local function eventHandler(self, event, ...)
         end
     end
     CraftyProfCharacterDB = charTable
-    CraftyProfDB=outTable
 end
 s:SetScript("OnEvent", eventHandler);
+
+function scrape_recipe_reagents()
+    for i in sequence(300000,550000) do table.insert(recipeSkillIDs,i) end
+    outTable = outTable or {}
+    outTable["RecipeSpellIDs"] = {}
+    for _, t in pairs(recipeSkillIDs) do
+        local recipe = schematic(t)
+        if recipe then
+            outTable["RecipeSpellIDs"][t] = recipe
+        end
+    end
+    CraftyProfDB=outTable
+end
 
 function get_concentration_cap_timestamp(professionID)
     local currencyID = C_TradeSkillUI.GetConcentrationCurrencyID(professionID)
@@ -142,22 +147,8 @@ function schematic(recipeSkillID)
     if schematic["hasCraftingOperationInfo"] == false then
         return
     end
-    local reagentSlotSchematics = schematic["reagentSlotSchematics"]
     local row = {}
-    row.name = schematic["name"]
-    row.reagents = reagents(reagentSlotSchematics)
-    local coi = C_TradeSkillUI.GetCraftingOperationInfo(recipeSkillID, {}, nil, false)
-    if coi ~= nil then
-        row["professionID"] = C_TradeSkillUI.GetProfessionInfoByRecipeID(coi["recipeID"])
-        -- Crafting quality works this way:
-        -- Items with 3 ranks will be between CraftingQualityID 1-3 and difficulty will be 0%, 50%, and 100% of baseDifficulty
-        -- Items with 5 ranks will be between CraftingQualityID 4-8 and difficulty will be 0%, 20%, 50%, 80%, and 100% of baseDifficulty
-        row["baseDifficulty"] = coi["baseDifficulty"]
-        row["craftingQualityID"] = coi["craftingQualityID"]
-        row["craftingDataID"] = coi["craftingDataID"]
-    else
-        return
-    end
+    row.reagents = reagents(schematic["reagentSlotSchematics"])
     return row
 end
 
@@ -223,28 +214,28 @@ function readEnchant(itemLink)
     return 0, 0
 end
 
-function getAllAuctions()
+-- function getAllAuctions()
     
-    ah_list=C_AuctionHouse.ReplicateItems()
-    ah_length=C_AuctionHouse.GetNumReplicateItems()
-    print("Starting to collect" .. ah_length .. "auctions, please wait")
-    local i=0
-    local db_out = {}
-    while i< ah_length do
-        local info = { C_AuctionHouse.GetReplicateItemInfo(i) }
-        local link = C_AuctionHouse.GetReplicateItemLink(i)
-        if not C_Item.DoesItemExistByID(info[17]) then
-            --Continue would go here if it could
-        else
-            db_out[i]={info, link}
-        end
-        if i % 10000 then
-            print("finished ".. i .. " out of " .. ah_length)
-        end
-        i = i + 1
-    end
-    return db_out
-end
+--     ah_list=C_AuctionHouse.ReplicateItems()
+--     ah_length=C_AuctionHouse.GetNumReplicateItems()
+--     print("Starting to collect" .. ah_length .. "auctions, please wait")
+--     local i=0
+--     local db_out = {}
+--     while i< ah_length do
+--         local info = { C_AuctionHouse.GetReplicateItemInfo(i) }
+--         local link = C_AuctionHouse.GetReplicateItemLink(i)
+--         if not C_Item.DoesItemExistByID(info[17]) then
+--             --Continue would go here if it could
+--         else
+--             db_out[i]={info, link}
+--         end
+--         if i % 10000 then
+--             print("finished ".. i .. " out of " .. ah_length)
+--         end
+--         i = i + 1
+--     end
+--     return db_out
+-- end
 
 function getCraftingOrderInfo(coi)
     row = {}
