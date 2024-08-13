@@ -155,6 +155,7 @@ function schematic(recipeSkillID)
         row.reagents = reagents(schematic["reagentSlotSchematics"])
     else
         return
+    end
     return row
 end
 
