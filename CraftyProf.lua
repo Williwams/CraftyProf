@@ -49,39 +49,88 @@ s:RegisterEvent("CRAFTINGORDERS_UPDATE_ORDER_COUNT");
 --s:RegisterEvent("REPLICATE_ITEM_LIST_UPDATE");
 s:RegisterEvent("TRADE_SKILL_SHOW");
 s:RegisterEvent("TRADE_SKILL_LIST_UPDATE");
+s:RegisterEvent("TRADE_SKILL_ITEM_CRAFTED_RESULT");
+s:RegisterEvent("TRADE_SKILL_CURRENCY_REWARD_RESULT");
+s:RegisterEvent("TRADE_SKILL_CRAFT_BEGIN");
+cur_recipe = ""
+cur_material = 0
 local function eventHandler(self, event, ...)
-    charTable=CraftyProfCharacterDB or {}
-    charTable["CraftingOrders"] = charTable["CraftingOrders"] or {}
-    charTable["ProfTraits"] = charTable["ProfTraits"] or {}
-    charTable["RecipeList"] = charTable["RecipeList"] or {}
-    if event == "CRAFTINGORDERS_UPDATE_ORDER_COUNT" then
-        orderTab, orderNum = ...
-        orders = C_CraftingOrders.GetCrafterOrders(orderTab)
-        for _, coi in pairs(orders) do
-            info = getCraftingOrderInfo(coi)
-            charTable["CraftingOrders"][coi.orderID] = info
+    if event == "TRADE_SKILL_ITEM_CRAFTED_RESULT" or event == "TRADE_SKILL_CURRENCY_REWARD_RESULT" then
+        resultData = ...
+        out = CraftyProfCraftingDB or {}
+        profInfo = C_TradeSkillUI.GetChildProfessionInfo()
+        stats = getProfessionItemStats()
+        resultData["baseSkill"] = profInfo["baseSkill"]
+        resultData["ProfStats"] = stats
+        traits = getRelevantProfTraits(profInfo.professionID, CraftyProfCharacterDB["ProfTraits"])
+        resultData["ProfTraits"] = traits
+        table.insert(out, resultData)
+        CraftyProfCraftingDB = out
+    elseif event == "TRADE_SKILL_CRAFT_BEGIN" then
+        cur_recipe = ...
+    else
+        charTable=CraftyProfCharacterDB or {}
+        charTable["CraftingOrders"] = charTable["CraftingOrders"] or {}
+        charTable["ProfTraits"] = charTable["ProfTraits"] or {}
+        charTable["RecipeList"] = charTable["RecipeList"] or {}
+        if event == "CRAFTINGORDERS_UPDATE_ORDER_COUNT" then
+            orderTab, orderNum = ...
+            orders = C_CraftingOrders.GetCrafterOrders(orderTab)
+            for _, coi in pairs(orders) do
+                info = getCraftingOrderInfo(coi)
+                charTable["CraftingOrders"][coi.orderID] = info
+            end
         end
-    end
-    --if event == "AUCTION_HOUSE_SHOW" then
-        --outTable["auctions"] = getAllAuctions()
-    --end
-    if event == "ADDON_LOADED" then
-        -- Do Profession Traits on login, should also do after its been updated
-        local nodeData=map_profession_traits()
-        charTable["ProfTraits"] = nodeData
-        charTable["charGUID"] = UnitGUID("player")
-        -- This needs to be refactored and then split in to its own addon. 
-        -- This functionality is only used to scrape in game resources for crafting data
-    end
-    if event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" then
-        prof, data = update_recipe_list("Khaz Algar") 
-        if prof > 0 then
-            charTable["RecipeList"][prof] = data
+        --if event == "AUCTION_HOUSE_SHOW" then
+            --outTable["auctions"] = getAllAuctions()
+        --end
+        if event == "ADDON_LOADED" then
+            hookstuff()
+            -- Just blast away the Crafting output database so it doesnt get out of hand. this should be imported
+            -- quickly by Taskmaster and before a second refresh happens. If not, its just crafting output metrics
+            -- so its not critical
+            CraftyProfCraftingDB = {}
+            -- Do Profession Traits on login, should also do after its been updated
+            local nodeData=map_profession_traits()
+            charTable["ProfTraits"] = nodeData
+            charTable["charGUID"] = UnitGUID("player")
+            -- This needs to be refactored and then split in to its own addon. 
+            -- This functionality is only used to scrape in game resources for crafting data
         end
+        if event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" then
+            prof, data = update_recipe_list("Khaz Algar") 
+            if prof > 0 then
+                charTable["RecipeList"][prof] = data
+            end
+        end
+        CraftyProfCharacterDB = charTable
     end
-    CraftyProfCharacterDB = charTable
 end
 s:SetScript("OnEvent", eventHandler);
+
+
+function hookstuff()
+    hooksecurefunc(C_TradeSkillUI, "CraftSalvage", catch_salvage)
+end
+
+-- Salvage is the Tradeskill type used by Prospecting and Milling and is the only way to actually determine what is being done
+-- You can infer RecipeSpellID from clicking around in the UI but this the only way to extract what material you are using without
+-- relying on Resourcefulness procs
+function catch_salvage(recipeSpellID, numCasts, itemTarget, craftingReagents, applyConcentration)    
+    cur_recipe = recipeSpellID
+    cur_material = C_Container.GetContainerItemID(itemTarget["bagID"], itemTarget["slotIndex"])
+end
+function getRelevantProfTraits(prof, full_list)
+    outlist = {}
+    for node, count in pairs(full_list) do
+        for _, entry in ipairs(TraitNodes[prof]) do
+            if entry == node then
+                outlist[node] = count
+            end
+        end
+    end
+    return outlist
+end
 
 function scrape_recipe_reagents()
     for i in sequence(300000,550000) do table.insert(recipeSkillIDs,i) end
@@ -126,6 +175,9 @@ function update_recipe_list(expansionName)
 
 end
 
+-- print(C_TradeSkillUI.GetBaseProfessionInfo()["profession"]) gives 7 for tailoring
+-- print(C_TradeSkillUI.IsNearProfessionSpellFocus(7)) true if near table
+-- C_TradeSkillUI.OpenRecipe(446930)
 function map_profession_traits()
     local nodeMap = {}
     for prof, nodelist in pairs(TraitNodes) do
@@ -144,7 +196,6 @@ end
 
 function schematic(recipeSkillID)
     local schematic = C_TradeSkillUI.GetRecipeSchematic(recipeSkillID, false)
-    
     if schematic["hasCraftingOperationInfo"] == false then
         return
     end

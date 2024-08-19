@@ -5,8 +5,7 @@
 ## Author: Williwams
 ## SavedVariables: CraftyProfDB
 ## SavedVariablesPerCharacter: CraftyProfCharacterDB
-
+## SavedVariablesPerCharacter: CraftyProfCraftingDB
 CraftyProf.lua
-
 #rebuilt from wow-profession-tree
 traitnodes.lua
