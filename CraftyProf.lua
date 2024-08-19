@@ -62,6 +62,7 @@ local function eventHandler(self, event, ...)
         stats = getProfessionItemStats()
         resultData["baseSkill"] = profInfo["baseSkill"]
         resultData["RecipeSpellID"] = cur_recipe
+        resultData["material_itemID"] = cur_material
         resultData["ProfStats"] = stats
         traits = getRelevantProfTraits(profInfo.professionID, CraftyProfCharacterDB["ProfTraits"])
         resultData["ProfTraits"] = traits
