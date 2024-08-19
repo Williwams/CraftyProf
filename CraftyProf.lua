@@ -61,13 +61,12 @@ local function eventHandler(self, event, ...)
         profInfo = C_TradeSkillUI.GetChildProfessionInfo()
         stats = getProfessionItemStats()
         resultData["baseSkill"] = profInfo["baseSkill"]
+        resultData["RecipeSpellID"] = cur_recipe
         resultData["ProfStats"] = stats
         traits = getRelevantProfTraits(profInfo.professionID, CraftyProfCharacterDB["ProfTraits"])
         resultData["ProfTraits"] = traits
         table.insert(out, resultData)
         CraftyProfCraftingDB = out
-    elseif event == "TRADE_SKILL_CRAFT_BEGIN" then
-        cur_recipe = ...
     else
         charTable=CraftyProfCharacterDB or {}
         charTable["CraftingOrders"] = charTable["CraftingOrders"] or {}
